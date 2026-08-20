@@ -58,7 +58,17 @@ app.post('/login', (req, res) => {
 
 });
 
+// Endpoint ROOT
+app.get('/', (req, res) => {
+    res.json({
+        message: 'API Server Motivasi Siswa berjalan dengan baik!',
+        endpoints: {
+            login: 'POST /login'
+        }
+    });
+});
+
 // Jalankan Server
-app.listen(3000, () => {
-    console.log('Server berjalan di http://localhost:3000');
+app.listen(2000, () => {
+    console.log('Server berjalan di http://localhost:2000');
 });

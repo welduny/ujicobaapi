@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:io';
+import 'dart:async';
 
 void main() {
   runApp(const MyApp());
@@ -31,36 +33,110 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final emailCtrl = TextEditingController(text: "siswa@gmail.com");
   final passCtrl = TextEditingController(text: "123456");
+  bool isLoading = false;
 
   Future<void> doLogin() async {
-    final url = Uri.parse("http://10.0.2.2:2000/login");
-
-    final response = await http.post(
-      url,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: jsonEncode({
-        "email": emailCtrl.text,
-        "password": passCtrl.text,
-      }),
-    );
-
-    if (response.statusCode == 200 && mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const HomePage(),
-        ),
-      );
-    } else {
-      if (!mounted) return;
-
+    if (emailCtrl.text.isEmpty || passCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Login gagal! Cek email/password."),
-        ),
+        const SnackBar(content: Text("Email dan Password tidak boleh kosong!")),
       );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final url = Uri.parse("http://localhost:2000/login");
+      print("🔵 Mengirim login ke: $url");
+      print("📤 Email: ${emailCtrl.text}, Password: ${passCtrl.text}");
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "email": emailCtrl.text,
+          "password": passCtrl.text,
+        }),
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException("Koneksi timeout - pastikan server berjalan!");
+        },
+      );
+
+      print("✅ Response status: ${response.statusCode}");
+      print("✅ Response body: ${response.body}");
+
+      // Jangan cek mounted dulu, langsung print dulu
+      if (response.statusCode == 200) {
+        print("✅ Login BERHASIL!");
+        
+        // Navigasi langsung tanpa check mounted dulu
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+        print("✅ Navigation berhasil dipanggil!");
+      } else {
+        print("❌ Status code bukan 200, Response: ${response.body}");
+        
+        // Try decode response
+        try {
+          final data = jsonDecode(response.body);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Login gagal! ${data['message'] ?? 'Cek email/password.'}"),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Login gagal! Status: ${response.statusCode}"),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } on TimeoutException catch (e) {
+      print("❌ TIMEOUT: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("$e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } on SocketException catch (e) {
+      print("❌ SOCKET ERROR: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Tidak dapat terhubung ke server. Pastikan backend berjalan di port 2000!"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print("❌ ERROR: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -89,8 +165,24 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: doLogin,
-              child: const Text("MASUK (Custom API)"),
+              onPressed: isLoading ? null : doLogin,
+              child: isLoading
+                  ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text("Loading..."),
+                      ],
+                    )
+                  : const Text("MASUK (Custom API)"),
             ),
           ],
         ),
